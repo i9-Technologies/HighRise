@@ -1,19 +1,17 @@
 <?php
-/*
-The file integrates HelpSpot's Live Lookup with 37Signals Highrise CRM tool
-PHP Versions required: 5+
-PHP Modules required: curl
-*/
 
 /*
-MODIFY THESE FOR YOUR HIGHRISE ACCOUNT */
-$highrise_url = ''; //Your Highrise URL, something like http://userscape.highrisehq.com
-$api_token = ''; //You can find this in your Highrise account in the "my info" screen
+ * The file integrates HelpSpot's Live Lookup with 37Signals Highrise CRM tool
+ * PHP Versions required: 5+
+ * PHP Modules required: curl
+ */
+
+/* MODIFY THESE FOR YOUR HIGHRISE ACCOUNT */
+$highrise_url = 'https://i9technologies.highrisehq.com'; //Your Highrise URL, something like http://userscape.highrisehq.com
+$api_token = 'b9ed71b998a8b31f99f5c083726f07d6'; //You can find this in your Highrise account in the "my info" screen
 
 /****************** NO MODIFICATIONS REQUIRED BELOW HERE ******************/
-
-/*
-GET HIGHRISE XML */
+/* GET HIGHRISE XML */
 //Highrise currently doesn't have a contact search, so we need to pull in all the contacts and search ourselves
 $curl = curl_init($highrise_url.'/people.xml');
 
@@ -32,44 +30,26 @@ $xml = curl_exec($curl);
 curl_close($curl);
 
 //Parse the XML returned from Highrise
-$people = simplexml_load_string($xml);
+$people = new SimpleXMLElement($xml);
 
-/*
-SEARCH PEOPLE (BY FULL NAME, LAST NAME OR EMAIL)*/
+/* SEARCH PEOPLE BY PHONE NUMBER */
 $matches = array();
-foreach($people->person AS $person){
-	if( ($person->{'first-name'} == $_GET['first_name'] && $person->{'last-name'} == $_GET['last_name']) ||
-		(!empty($person->{'last-name'}) && strtolower($person->{'last-name'}) == strtolower($_GET['last_name'])) ||
-		(!empty($person->{'contact-data'}->{'email-addresses'}->{'email-address'}[0]->address) && strtolower($person->{'contact-data'}->{'email-addresses'}->{'email-address'}[0]->address) == strtolower($_GET['email'])) ){
 
-		//This person matched
-		$matches[] = $person;
-		
-	}
+foreach($people->person AS $person){
+        foreach($person->{'contact-data'} AS $contactData){
+                foreach($contactData->{'phone-numbers'} AS $phoneNumbers){
+                        if($phoneNumbers->{'phone-number'}->number == $_GET['phone-number']){
+                                // takes the first match, this could be altered to handle multiple matches if desired
+				$matches = $person;
+                                break;
+                        }
+                }
+        }
 }
 
-/*
-RETURN RESULTS TO HELPSPOT */
-header('Content-type: text/xml');
-echo '<?xml version="1.0" encoding="ISO-8859-1"'."?".">\n";
-	
-echo '<livelookup version="1.0" columns="customer_id,first_name,last_name">';
-	//If we found some matches then output them	
-	if(count($matches)){
-		//Output each contact, these will be shown to the help desk user. The user can then pick the right one (if more than one returned). 
-		//The data can also be automatically inserted.
-		foreach($matches AS $person){
-			echo '
-			<customer>
-				<first_name>'.$person->{'first-name'}.'</first_name>
-				<last_name>'.$person->{'last-name'}.'</last_name>
-				<email>'.$person->{'contact-data'}->{'email-addresses'}->{'email-address'}[0]->address.'</email>
-				<phone>'.$person->{'contact-data'}->{'phone-numbers'}->{'phone-number'}[0]->number.'</phone>
-				<title>'.$person->title.'</title>
-				<background>'.$person->background.'</background>
-			</customer>';
-		}
-	}
-echo '</livelookup>';		
-	
+//If there was a match, redirect to the URL
+if($matches){
+        header("Location: " . $highrise_url . "/people/" . $matches->{'id'} . "-" . $matches->{'first-name'} . "-" . $matches->{'last-name'});
+}
+
 ?>
